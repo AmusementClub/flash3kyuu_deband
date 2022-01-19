@@ -1,0 +1,56 @@
+name: Build
+
+on:
+  push:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'which tag to upload to'
+        default: ''
+
+jobs:
+  build-windows:
+    runs-on: windows-2019
+
+    defaults:
+      run:
+        shell: cmd
+
+    steps:
+    - name: Checkout repo
+      uses: actions/checkout@v2
+      with:
+        fetch-depth: 0
+
+    - name: Setup MSVC
+      uses: ilammy/msvc-dev-cmd@v1
+
+    - name: Configure & Build
+      run: |
+        rem python ./waf configure -vvv --mode=release --msvc_version="msvc 16.11" --msvc_target="x64"
+        rem python ./waf build -vvv
+        mkdir build
+        mkdir build\obj
+        msbuild.exe msvc\flash3kyuu_deband.vcxproj /p:TargetName=f3kdb /p:IntDir=build\obj\ /p:ConfigurationType=DynamicLibrary /t:Build /p:OutDir=build /p:Configuration=release /p:Platform=x64 /p:DisableVapoursynth=false /p:DisableAvisynth=false /p:BuildProjectReferences=false /p:DisableProjectReferences=true
+
+    - name: Upload
+      uses: actions/upload-artifact@v2
+      with:
+        name: build
+        path: msvc/build
+
+    - name: Compress artifact for release
+      if: github.event_name == 'workflow_dispatch' && github.event.inputs.tag != ''
+      run: |
+        cd msvc/build
+        7z a -t7z -mx=7 ../../f3kdb.${{ github.event.inputs.tag }}.7z f3kdb.*
+
+    - name: Release
+      uses: softprops/action-gh-release@v1
+      if: github.event_name == 'workflow_dispatch' && github.event.inputs.tag != ''
+      with:
+        tag_name: ${{ github.event.inputs.tag }}
+        files: f3kdb.${{ github.event.inputs.tag }}.7z
+        fail_on_unmatched_files: true
+        generate_release_notes: false
+        prerelease: true
